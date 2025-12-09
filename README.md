@@ -11,6 +11,7 @@ Visual Workflow Designer for Pimcore - Create, edit, and manage workflows with a
 
 - 🎨 **Visual Graph Editor** - Drag-and-drop interface for creating workflow diagrams
 - 📝 **Places & Transitions** - Full support for Pimcore workflow places and transitions
+- 🎯 **Flexible Support Strategies** - Simple class list, expression-based, or custom service strategies
 - 🔒 **Guard Expressions** - Visual editing of Symfony guard expressions
 - 🔐 **Permission Rules** - Configure place permissions with conditions
 - 📧 **Notifications** - Set up email/Pimcore notifications per transition
@@ -94,14 +95,32 @@ imports:
 6. **Save Draft** to store your work
 7. **Publish** to activate the workflow
 
-### Applying to Data Objects
+### Support Strategies
 
-In your workflow configuration, set the `supports` property:
+Choose how the workflow applies to objects:
 
+**Simple (Class List)** - Apply to all objects of selected classes:
 ```yaml
 supports:
-    - 'Pimcore\Model\DataObject\YourClass'
+    - Pimcore\Model\DataObject\Product
 ```
+
+**Expression** - Apply based on conditions:
+```yaml
+support_strategy:
+    type: expression
+    arguments:
+        - Pimcore\Model\DataObject\Product
+        - "subject.getProductType() == 'article'"
+```
+
+**Custom Service** - Use custom PHP logic:
+```yaml
+support_strategy:
+    service: App\Workflow\CustomSupportStrategy
+```
+
+See the [User Guide](docs/user-guide.md) for detailed documentation on support strategies.
 
 ## Permissions
 

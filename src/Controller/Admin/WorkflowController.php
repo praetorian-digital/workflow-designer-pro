@@ -598,6 +598,9 @@ class WorkflowController extends AdminAbstractController
                 'mailDocuments' => $this->configService->getMailDocuments(),
                 'publicationStates' => $this->configService->getPublicationStates(),
                 'existingWorkflows' => $this->configService->getExistingWorkflows(),
+                'supportStrategyServices' => $this->configService->getSupportStrategyServices(),
+                'expressionTemplates' => $this->configService->getExpressionTemplates(),
+                'expressionAutocomplete' => $this->configService->getExpressionAutocompleteSuggestions(),
             ],
         ]);
     }
@@ -616,8 +619,20 @@ class WorkflowController extends AdminAbstractController
         if (isset($data['supports'])) {
             $workflow->setSupports($data['supports']);
         }
+        // Handle support strategy configuration
         if (isset($data['supportStrategy'])) {
-            $workflow->setSupportStrategy($data['supportStrategy']);
+            $strategy = $data['supportStrategy'];
+            if (is_array($strategy)) {
+                if (isset($strategy['type'])) {
+                    $workflow->setSupportStrategyType($strategy['type']);
+                }
+                if (isset($strategy['expression'])) {
+                    $workflow->setSupportStrategyExpression($strategy['expression']);
+                }
+                if (isset($strategy['service'])) {
+                    $workflow->setSupportStrategyService($strategy['service']);
+                }
+            }
         }
         if (isset($data['initialMarking'])) {
             $workflow->setInitialMarking($data['initialMarking']);

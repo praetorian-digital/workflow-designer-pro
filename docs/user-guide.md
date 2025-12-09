@@ -11,6 +11,10 @@ A visual workflow designer for Pimcore 2024.4+ that provides a graphical interfa
   - Global actions
   - Marking store configuration
   - Audit trail support
+- **Flexible Support Strategies**: Three ways to define which objects a workflow applies to:
+  - Simple class list selection
+  - Expression-based conditions with templates
+  - Custom service strategy for advanced logic
 - **Import/Export**: JSON and YAML format support
 - **Workflow Simulation**: Interactive testing of workflows
 - **Version Control**: Automatic versioning with rollback support
@@ -68,9 +72,142 @@ Assign these permissions to users via **Settings → Users & Roles**.
 
 1. Navigate to **Settings → Workflow Designer Pro** in the Pimcore admin
 2. Click **"New Workflow"** to create a workflow
-3. Use the graph editor or grid views to add places and transitions
-4. Configure guards, notifications, and other options
-5. Validate and publish your workflow
+3. Configure the support strategy (see below)
+4. Use the graph editor or grid views to add places and transitions
+5. Configure guards, notifications, and other options
+6. Validate and publish your workflow
+
+## Support Strategies
+
+Support strategies define which objects a workflow applies to. You can choose between three different strategies:
+
+### Simple Strategy (Class List)
+
+The simplest approach - select one or more Pimcore classes that the workflow should apply to.
+
+**Use when:** You want the workflow to apply to all objects of certain classes.
+
+**Configuration:**
+- Select "Simple (Class List)" in the Strategy Type
+- Choose one or more classes from the dropdown
+
+**Generated YAML:**
+```yaml
+supports:
+    - Pimcore\Model\DataObject\Product
+    - Pimcore\Model\DataObject\Category
+```
+
+### Expression Strategy
+
+Use Symfony expressions to define conditions for when the workflow applies. This allows you to filter based on object properties, publication state, path, and more.
+
+**Use when:** You want the workflow to apply only to specific objects that meet certain criteria.
+
+**Configuration:**
+- Select "Expression" in the Strategy Type
+- Choose the target class
+- Enter an expression or use a template
+
+**Expression Templates:**
+
+| Template | Expression | Description |
+|----------|------------|-------------|
+| Property equals value | `subject.getPropertyName() == 'value'` | Check if a property equals a value |
+| Property is not empty | `subject.getPropertyName() !== null and subject.getPropertyName() !== ''` | Check if property has a value |
+| Object is published | `subject.isPublished() == true` | Only published objects |
+| Object is not published | `subject.isPublished() == false` | Only draft objects |
+| Path starts with | `subject.getPath() starts with '/folder/'` | Objects in specific folder |
+| Class name equals | `subject.getClassName() == 'Product'` | Check object class |
+| Property in list | `subject.getStatus() in ['draft', 'review']` | Property value in a list |
+| Combined conditions | `subject.getType() == 'article' and subject.isPublished() == false` | Multiple conditions |
+
+**Available Methods:**
+
+| Method | Description | Return Type |
+|--------|-------------|-------------|
+| `subject.getId()` | Object ID | int |
+| `subject.getKey()` | Object key | string |
+| `subject.getPath()` | Object path | string |
+| `subject.getFullPath()` | Full path with key | string |
+| `subject.getParentId()` | Parent ID | int |
+| `subject.getClassName()` | Class name | string |
+| `subject.isPublished()` | Publication state | bool |
+| `subject.getCreationDate()` | Creation timestamp | int |
+| `subject.getModificationDate()` | Modification timestamp | int |
+| `subject.get{PropertyName}()` | Any custom property | varies |
+
+**Operators:** `==`, `!=`, `>`, `<`, `>=`, `<=`, `in`, `not in`, `matches`, `starts with`, `ends with`, `contains`
+
+**Logical Operators:** `and`, `or`, `not`
+
+**Generated YAML:**
+```yaml
+support_strategy:
+    type: expression
+    arguments:
+        - Pimcore\Model\DataObject\Product
+        - "subject.getProductType() == 'article'"
+```
+
+### Custom Service Strategy
+
+For complex logic that cannot be expressed in a simple expression, create a custom service class.
+
+**Use when:** You need database queries, external service calls, or complex business logic.
+
+**Configuration:**
+- Select "Custom Service" in the Strategy Type
+- Select from auto-detected services or enter a custom class name
+
+**Creating a Custom Service:**
+
+```php
+<?php
+namespace App\Workflow;
+
+use Symfony\Component\Workflow\SupportStrategy\WorkflowSupportStrategyInterface;
+use Symfony\Component\Workflow\WorkflowInterface;
+
+class ProductWorkflowStrategy implements WorkflowSupportStrategyInterface
+{
+    public function supports(WorkflowInterface $workflow, object $subject): bool
+    {
+        if (!$subject instanceof \Pimcore\Model\DataObject\Product) {
+            return false;
+        }
+        
+        // Custom logic - e.g., check product category, inventory, etc.
+        return $subject->getProductType() === 'article' 
+            && $subject->getStock() > 0;
+    }
+}
+```
+
+**Register the Service:**
+
+```yaml
+# config/services.yaml
+services:
+    App\Workflow\ProductWorkflowStrategy:
+        tags: ['workflow.support_strategy']
+```
+
+**Generated YAML:**
+```yaml
+support_strategy:
+    service: App\Workflow\ProductWorkflowStrategy
+```
+
+### Validation Rules
+
+The validation system checks different requirements based on the selected strategy:
+
+| Strategy | Requirements |
+|----------|-------------|
+| Simple | At least one class must be selected |
+| Expression | Target class AND expression required |
+| Custom | Service class name required |
 
 ## Documentation
 
@@ -127,6 +264,7 @@ src/WorkflowDesignerProBundle/
 │                   ├── panel.js
 │                   ├── editor.js
 │                   ├── graph.js
+│                   ├── support-strategy.js
 │                   ├── place.js
 │                   ├── transition.js
 │                   ├── guard.js

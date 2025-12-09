@@ -29,3 +29,13 @@ services:
             $backupEnabled: '%workflow_designer_pro.backup_enabled%'
             $autoCacheClear: '%workflow_designer_pro.auto_cache_clear%'
 
+    # Pimcore config service with support strategy locator
+    PraetorianDigital\WorkflowDesignerProBundle\Service\PimcoreWorkflowConfigService:
+        arguments:
+            $supportStrategyLocator: !tagged_locator { tag: 'workflow.support_strategy' }
+
+    # Auto-tag all services implementing WorkflowSupportStrategyInterface
+    _instanceof:
+        Symfony\Component\Workflow\SupportStrategy\WorkflowSupportStrategyInterface:
+            tags: ['workflow.support_strategy']
+

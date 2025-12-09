@@ -9,12 +9,18 @@ namespace PraetorianDigital\WorkflowDesignerProBundle\Model;
  */
 class Workflow implements \JsonSerializable
 {
+    public const SUPPORT_STRATEGY_SIMPLE = 'simple';
+    public const SUPPORT_STRATEGY_EXPRESSION = 'expression';
+    public const SUPPORT_STRATEGY_CUSTOM = 'custom';
+
     private string $id;
     private string $name;
     private ?string $label = null;
     private string $type = 'workflow'; // 'workflow' or 'state_machine'
     private array $supports = [];
-    private ?string $supportStrategy = null;
+    private string $supportStrategyType = self::SUPPORT_STRATEGY_SIMPLE; // 'simple', 'expression', 'custom'
+    private ?string $supportStrategyExpression = null; // Expression for expression strategy
+    private ?string $supportStrategyService = null; // Service class for custom strategy
     private ?string $initialMarking = null;
     private array $places = [];
     private array $transitions = [];
@@ -71,9 +77,19 @@ class Workflow implements \JsonSerializable
         return $this->supports;
     }
 
-    public function getSupportStrategy(): ?string
+    public function getSupportStrategyType(): string
     {
-        return $this->supportStrategy;
+        return $this->supportStrategyType;
+    }
+
+    public function getSupportStrategyExpression(): ?string
+    {
+        return $this->supportStrategyExpression;
+    }
+
+    public function getSupportStrategyService(): ?string
+    {
+        return $this->supportStrategyService;
     }
 
     public function getInitialMarking(): ?string
@@ -185,9 +201,26 @@ class Workflow implements \JsonSerializable
         return $this;
     }
 
-    public function setSupportStrategy(?string $supportStrategy): self
+    public function setSupportStrategyType(string $supportStrategyType): self
     {
-        $this->supportStrategy = $supportStrategy;
+        if (!in_array($supportStrategyType, [self::SUPPORT_STRATEGY_SIMPLE, self::SUPPORT_STRATEGY_EXPRESSION, self::SUPPORT_STRATEGY_CUSTOM], true)) {
+            throw new \InvalidArgumentException('Support strategy type must be "simple", "expression", or "custom"');
+        }
+        $this->supportStrategyType = $supportStrategyType;
+        $this->markUpdated();
+        return $this;
+    }
+
+    public function setSupportStrategyExpression(?string $supportStrategyExpression): self
+    {
+        $this->supportStrategyExpression = $supportStrategyExpression;
+        $this->markUpdated();
+        return $this;
+    }
+
+    public function setSupportStrategyService(?string $supportStrategyService): self
+    {
+        $this->supportStrategyService = $supportStrategyService;
         $this->markUpdated();
         return $this;
     }
@@ -324,7 +357,11 @@ class Workflow implements \JsonSerializable
             'label' => $this->label,
             'type' => $this->type,
             'supports' => $this->supports,
-            'supportStrategy' => $this->supportStrategy,
+            'supportStrategy' => [
+                'type' => $this->supportStrategyType,
+                'expression' => $this->supportStrategyExpression,
+                'service' => $this->supportStrategyService,
+            ],
             'initialMarking' => $this->initialMarking,
             'places' => array_map(fn(Place $p) => $p->jsonSerialize(), $this->places),
             'transitions' => array_map(fn(Transition $t) => $t->jsonSerialize(), $this->transitions),
@@ -359,8 +396,23 @@ class Workflow implements \JsonSerializable
         if (isset($data['supports'])) {
             $workflow->setSupports($data['supports']);
         }
+        // Handle support strategy - can be array (new format) or string (legacy format)
         if (isset($data['supportStrategy'])) {
-            $workflow->setSupportStrategy($data['supportStrategy']);
+            if (is_array($data['supportStrategy'])) {
+                if (isset($data['supportStrategy']['type'])) {
+                    $workflow->setSupportStrategyType($data['supportStrategy']['type']);
+                }
+                if (isset($data['supportStrategy']['expression'])) {
+                    $workflow->setSupportStrategyExpression($data['supportStrategy']['expression']);
+                }
+                if (isset($data['supportStrategy']['service'])) {
+                    $workflow->setSupportStrategyService($data['supportStrategy']['service']);
+                }
+            } elseif (is_string($data['supportStrategy'])) {
+                // Legacy format: supportStrategy was just a service name
+                $workflow->setSupportStrategyType(self::SUPPORT_STRATEGY_CUSTOM);
+                $workflow->setSupportStrategyService($data['supportStrategy']);
+            }
         }
         if (isset($data['initialMarking'])) {
             $workflow->setInitialMarking($data['initialMarking']);

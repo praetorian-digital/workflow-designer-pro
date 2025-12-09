@@ -88,12 +88,27 @@ pimcore.plugin.WorkflowDesignerPro.Editor = Class.create({
 
     getPropertiesPanel: function () {
         if (!this.propertiesPanel) {
+            // Initialize support strategy component
+            this.supportStrategyComponent = new pimcore.plugin.WorkflowDesignerPro.SupportStrategy({
+                workflow: this.workflow,
+                config: this.config,
+                editor: this,
+                callback: function(data) {
+                    // Update workflow data when support strategy changes
+                    this.workflow.supports = data.supports;
+                    this.workflow.supportStrategy = data.supportStrategy;
+                }.bind(this)
+            });
+
             this.propertiesPanel = new Ext.form.Panel({
                 region: 'north',
-                height: 180,
+                height: 350,
+                minHeight: 200,
+                maxHeight: 500,
                 collapsible: true,
                 title: t('Workflow Properties'),
                 bodyPadding: 10,
+                autoScroll: true,
                 layout: 'column',
                 defaults: {
                     columnWidth: 0.5,
@@ -119,24 +134,6 @@ pimcore.plugin.WorkflowDesignerPro.Editor = Class.create({
                         value: this.workflow.type || 'workflow',
                         store: [['workflow', 'Workflow'], ['state_machine', 'State Machine']],
                         editable: false,
-                        listeners: {
-                            change: this.markDirty.bind(this)
-                        }
-                    },
-                    {
-                        xtype: 'tagfield',
-                        name: 'supports',
-                        fieldLabel: t('Supported Classes'),
-                        columnWidth: 1,
-                        store: new Ext.data.Store({
-                            fields: ['fullClass', 'name'],
-                            data: this.config.classes || []
-                        }),
-                        displayField: 'name',
-                        valueField: 'fullClass',
-                        value: this.workflow.supports || [],
-                        queryMode: 'local',
-                        filterPickList: true,
                         listeners: {
                             change: this.markDirty.bind(this)
                         }
@@ -190,6 +187,13 @@ pimcore.plugin.WorkflowDesignerPro.Editor = Class.create({
                         listeners: {
                             change: this.markDirty.bind(this)
                         }
+                    },
+                    // Support Strategy Panel - full width
+                    {
+                        xtype: 'container',
+                        columnWidth: 1,
+                        padding: '10 5 5 5',
+                        items: [this.supportStrategyComponent.getPanel()]
                     }
                 ]
             });
@@ -725,10 +729,16 @@ pimcore.plugin.WorkflowDesignerPro.Editor = Class.create({
             transitions[data.name] = data;
         });
 
+        // Get support strategy data from component
+        var supportStrategyData = this.supportStrategyComponent 
+            ? this.supportStrategyComponent.getData() 
+            : { supports: [], supportStrategy: { type: 'simple', expression: null, service: null } };
+
         return {
             name: formData.name,
             type: formData.type,
-            supports: formData.supports || [],
+            supports: supportStrategyData.supports || [],
+            supportStrategy: supportStrategyData.supportStrategy,
             initialMarking: formData.initialMarking,
             markingStore: {
                 type: formData.markingStoreType,

@@ -8,12 +8,19 @@ use Pimcore\Model\User;
 use Pimcore\Model\User\Role;
 use Pimcore\Model\User\Permission\Definition;
 use Pimcore\Db;
+use Symfony\Component\DependencyInjection\ServiceLocator;
 
 /**
  * Service for interacting with Pimcore system configuration.
  */
 class PimcoreWorkflowConfigService
 {
+    private ?ServiceLocator $supportStrategyLocator;
+
+    public function __construct(?ServiceLocator $supportStrategyLocator = null)
+    {
+        $this->supportStrategyLocator = $supportStrategyLocator;
+    }
     /**
      * Get all available Pimcore DataObject classes.
      */
@@ -316,6 +323,167 @@ class PimcoreWorkflowConfigService
             ['value' => 'force_published', 'label' => 'Force Published'],
             ['value' => 'force_unpublished', 'label' => 'Force Unpublished'],
             ['value' => 'save_version', 'label' => 'Save Version Only'],
+        ];
+    }
+
+    /**
+     * Get available support strategy services implementing WorkflowSupportStrategyInterface.
+     */
+    public function getSupportStrategyServices(): array
+    {
+        $services = [];
+
+        if ($this->supportStrategyLocator !== null) {
+            foreach ($this->supportStrategyLocator->getProvidedServices() as $serviceId => $serviceClass) {
+                $services[] = [
+                    'id' => $serviceId,
+                    'class' => $serviceClass,
+                    'label' => $this->formatServiceLabel($serviceId),
+                ];
+            }
+        }
+
+        return $services;
+    }
+
+    /**
+     * Format a service ID into a human-readable label.
+     */
+    private function formatServiceLabel(string $serviceId): string
+    {
+        // Extract class name from fully qualified name
+        $parts = explode('\\', $serviceId);
+        $className = end($parts);
+        
+        // Convert CamelCase to words
+        $label = preg_replace('/(?<!^)([A-Z])/', ' $1', $className);
+        
+        // Remove common suffixes
+        $label = preg_replace('/(Support\s*)?Strategy$/i', '', $label);
+        
+        return trim($label) ?: $className;
+    }
+
+    /**
+     * Get expression templates for support strategy expressions.
+     */
+    public function getExpressionTemplates(): array
+    {
+        return [
+            [
+                'id' => 'property_equals',
+                'label' => 'Property equals value',
+                'expression' => "subject.getPropertyName() == 'value'",
+                'description' => 'Check if a property equals a specific value',
+                'placeholders' => ['PropertyName', 'value'],
+            ],
+            [
+                'id' => 'property_not_empty',
+                'label' => 'Property is not empty',
+                'expression' => "subject.getPropertyName() !== null and subject.getPropertyName() !== ''",
+                'description' => 'Check if a property has a value',
+                'placeholders' => ['PropertyName'],
+            ],
+            [
+                'id' => 'is_published',
+                'label' => 'Object is published',
+                'expression' => 'subject.isPublished() == true',
+                'description' => 'Check if the object is published',
+                'placeholders' => [],
+            ],
+            [
+                'id' => 'is_not_published',
+                'label' => 'Object is not published',
+                'expression' => 'subject.isPublished() == false',
+                'description' => 'Check if the object is not published (draft)',
+                'placeholders' => [],
+            ],
+            [
+                'id' => 'path_starts_with',
+                'label' => 'Path starts with',
+                'expression' => "subject.getPath() starts with '/folder/'",
+                'description' => 'Check if object is in a specific folder',
+                'placeholders' => ['/folder/'],
+            ],
+            [
+                'id' => 'class_name',
+                'label' => 'Class name equals',
+                'expression' => "subject.getClassName() == 'Product'",
+                'description' => 'Check if the object class matches',
+                'placeholders' => ['Product'],
+            ],
+            [
+                'id' => 'has_parent',
+                'label' => 'Has specific parent',
+                'expression' => 'subject.getParentId() == 123',
+                'description' => 'Check if object has a specific parent ID',
+                'placeholders' => ['123'],
+            ],
+            [
+                'id' => 'property_in_list',
+                'label' => 'Property value in list',
+                'expression' => "subject.getStatus() in ['draft', 'review']",
+                'description' => 'Check if property value is in a list',
+                'placeholders' => ['Status', 'draft', 'review'],
+            ],
+            [
+                'id' => 'combined_conditions',
+                'label' => 'Combined conditions',
+                'expression' => "subject.getType() == 'article' and subject.isPublished() == false",
+                'description' => 'Combine multiple conditions with and/or',
+                'placeholders' => ['Type', 'article'],
+            ],
+            [
+                'id' => 'relation_exists',
+                'label' => 'Relation exists',
+                'expression' => 'subject.getRelationField() !== null',
+                'description' => 'Check if a relation field has a value',
+                'placeholders' => ['RelationField'],
+            ],
+        ];
+    }
+
+    /**
+     * Get autocomplete suggestions for expression building.
+     */
+    public function getExpressionAutocompleteSuggestions(): array
+    {
+        return [
+            'methods' => [
+                ['value' => 'subject.getId()', 'label' => 'Get object ID', 'returnType' => 'int'],
+                ['value' => 'subject.getKey()', 'label' => 'Get object key', 'returnType' => 'string'],
+                ['value' => 'subject.getPath()', 'label' => 'Get object path', 'returnType' => 'string'],
+                ['value' => 'subject.getFullPath()', 'label' => 'Get full path with key', 'returnType' => 'string'],
+                ['value' => 'subject.getParentId()', 'label' => 'Get parent ID', 'returnType' => 'int'],
+                ['value' => 'subject.getClassName()', 'label' => 'Get class name', 'returnType' => 'string'],
+                ['value' => 'subject.isPublished()', 'label' => 'Check if published', 'returnType' => 'bool'],
+                ['value' => 'subject.getCreationDate()', 'label' => 'Get creation timestamp', 'returnType' => 'int'],
+                ['value' => 'subject.getModificationDate()', 'label' => 'Get modification timestamp', 'returnType' => 'int'],
+                ['value' => 'subject.getUserOwner()', 'label' => 'Get owner user ID', 'returnType' => 'int'],
+                ['value' => 'subject.getUserModification()', 'label' => 'Get modifier user ID', 'returnType' => 'int'],
+            ],
+            'operators' => [
+                ['value' => '==', 'label' => 'Equals'],
+                ['value' => '!=', 'label' => 'Not equals'],
+                ['value' => '>', 'label' => 'Greater than'],
+                ['value' => '<', 'label' => 'Less than'],
+                ['value' => '>=', 'label' => 'Greater or equal'],
+                ['value' => '<=', 'label' => 'Less or equal'],
+                ['value' => 'in', 'label' => 'In array'],
+                ['value' => 'not in', 'label' => 'Not in array'],
+                ['value' => 'matches', 'label' => 'Regex matches'],
+                ['value' => 'starts with', 'label' => 'Starts with'],
+                ['value' => 'ends with', 'label' => 'Ends with'],
+                ['value' => 'contains', 'label' => 'Contains'],
+            ],
+            'logical' => [
+                ['value' => 'and', 'label' => 'Logical AND'],
+                ['value' => 'or', 'label' => 'Logical OR'],
+                ['value' => 'not', 'label' => 'Logical NOT'],
+            ],
+            'functions' => [
+                ['value' => 'is_granted(\'ROLE_NAME\')', 'label' => 'Check user role', 'description' => 'Check if current user has role'],
+            ],
         ];
     }
 }

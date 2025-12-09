@@ -58,13 +58,8 @@ class WorkflowValidationService
             ];
         }
 
-        if (empty($workflow->getSupports())) {
-            $errors[] = [
-                'type' => 'error',
-                'message' => 'At least one supported class must be specified',
-                'field' => 'supports',
-            ];
-        }
+        // Validate support strategy based on type
+        $errors = array_merge($errors, $this->validateSupportStrategy($workflow));
 
         if (empty($workflow->getInitialMarking())) {
             $errors[] = [
@@ -72,6 +67,100 @@ class WorkflowValidationService
                 'message' => 'Initial marking (initial place) is required',
                 'field' => 'initialMarking',
             ];
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Validate support strategy configuration based on the selected type.
+     * 
+     * - Simple: requires at least one supported class
+     * - Expression: requires at least one supported class AND an expression
+     * - Custom: requires a service class (supports list is optional)
+     */
+    private function validateSupportStrategy(Workflow $workflow): array
+    {
+        $errors = [];
+        $strategyType = $workflow->getSupportStrategyType();
+        $supports = $workflow->getSupports();
+
+        switch ($strategyType) {
+            case Workflow::SUPPORT_STRATEGY_SIMPLE:
+                // Simple strategy requires at least one supported class
+                if (empty($supports)) {
+                    $errors[] = [
+                        'type' => 'error',
+                        'message' => 'At least one supported class must be specified for Simple strategy',
+                        'field' => 'supports',
+                    ];
+                }
+                break;
+
+            case Workflow::SUPPORT_STRATEGY_EXPRESSION:
+                // Expression strategy requires a class AND an expression
+                if (empty($supports)) {
+                    $errors[] = [
+                        'type' => 'error',
+                        'message' => 'A target class must be specified for Expression strategy',
+                        'field' => 'supports',
+                    ];
+                }
+                
+                $expression = $workflow->getSupportStrategyExpression();
+                if (empty($expression)) {
+                    $errors[] = [
+                        'type' => 'error',
+                        'message' => 'An expression must be specified for Expression strategy',
+                        'field' => 'supportStrategy.expression',
+                    ];
+                } else {
+                    // Basic expression validation
+                    if (substr_count($expression, '(') !== substr_count($expression, ')')) {
+                        $errors[] = [
+                            'type' => 'error',
+                            'message' => 'Support strategy expression has unbalanced parentheses',
+                            'field' => 'supportStrategy.expression',
+                        ];
+                    }
+                    // Check for common expression patterns
+                    if (!preg_match('/subject\.|is_granted|true|false/', $expression)) {
+                        $errors[] = [
+                            'type' => 'warning',
+                            'message' => 'Expression should typically reference "subject" (e.g., subject.getXxx()) or use is_granted()',
+                            'field' => 'supportStrategy.expression',
+                        ];
+                    }
+                }
+                break;
+
+            case Workflow::SUPPORT_STRATEGY_CUSTOM:
+                // Custom strategy requires a service class
+                $service = $workflow->getSupportStrategyService();
+                if (empty($service)) {
+                    $errors[] = [
+                        'type' => 'error',
+                        'message' => 'A service class must be specified for Custom strategy',
+                        'field' => 'supportStrategy.service',
+                    ];
+                } else {
+                    // Validate class name format
+                    if (!preg_match('/^[A-Z][a-zA-Z0-9_\\\\]*$/', $service)) {
+                        $errors[] = [
+                            'type' => 'warning',
+                            'message' => 'Service class name should be a valid fully qualified class name (e.g., App\\Workflow\\MyStrategy)',
+                            'field' => 'supportStrategy.service',
+                        ];
+                    }
+                }
+                break;
+
+            default:
+                $errors[] = [
+                    'type' => 'error',
+                    'message' => sprintf('Invalid support strategy type: %s', $strategyType),
+                    'field' => 'supportStrategy.type',
+                ];
         }
 
         return $errors;

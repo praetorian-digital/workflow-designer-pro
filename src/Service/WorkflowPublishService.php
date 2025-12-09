@@ -160,13 +160,10 @@ class WorkflowPublishService
             'label' => $workflow->getLabel() ?: $workflow->getName(),
             'priority' => 1,
             'type' => $workflow->getType(),
-            'supports' => $workflow->getSupports(),
         ];
 
-        // Support strategy
-        if ($workflow->getSupportStrategy()) {
-            $config['support_strategy'] = $workflow->getSupportStrategy();
-        }
+        // Build support configuration based on strategy type
+        $this->buildSupportConfig($workflow, $config);
 
         // Initial marking
         if ($workflow->getInitialMarking()) {
@@ -212,6 +209,61 @@ class WorkflowPublishService
         }
 
         return $config;
+    }
+
+    /**
+     * Build support configuration based on the support strategy type.
+     * 
+     * - Simple: uses 'supports' key with array of class names
+     * - Expression: uses 'support_strategy' with type: expression and arguments
+     * - Custom: uses 'support_strategy' with service key
+     */
+    private function buildSupportConfig(Workflow $workflow, array &$config): void
+    {
+        $strategyType = $workflow->getSupportStrategyType();
+
+        switch ($strategyType) {
+            case Workflow::SUPPORT_STRATEGY_EXPRESSION:
+                // Expression strategy: requires class and expression
+                $supports = $workflow->getSupports();
+                $expression = $workflow->getSupportStrategyExpression();
+                
+                if (!empty($supports) && !empty($expression)) {
+                    $config['support_strategy'] = [
+                        'type' => 'expression',
+                        'arguments' => [
+                            // First argument is the class (or first class if multiple)
+                            is_array($supports) ? $supports[0] : $supports,
+                            // Second argument is the expression
+                            $expression,
+                        ],
+                    ];
+                } else {
+                    // Fallback to simple supports if expression is not configured properly
+                    $config['supports'] = $workflow->getSupports();
+                }
+                break;
+
+            case Workflow::SUPPORT_STRATEGY_CUSTOM:
+                // Custom service strategy
+                $service = $workflow->getSupportStrategyService();
+                
+                if (!empty($service)) {
+                    $config['support_strategy'] = [
+                        'service' => $service,
+                    ];
+                } else {
+                    // Fallback to simple supports if service is not configured
+                    $config['supports'] = $workflow->getSupports();
+                }
+                break;
+
+            case Workflow::SUPPORT_STRATEGY_SIMPLE:
+            default:
+                // Simple strategy: just list the supported classes
+                $config['supports'] = $workflow->getSupports();
+                break;
+        }
     }
 
     private function buildPlacesConfig(Workflow $workflow): array

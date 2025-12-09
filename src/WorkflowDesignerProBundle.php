@@ -29,6 +29,7 @@ class WorkflowDesignerProBundle extends AbstractPimcoreBundle implements Pimcore
             '/bundles/workflowdesignerpro/js/pimcore/startup.js',
             '/bundles/workflowdesignerpro/js/pimcore/workflow/panel.js',
             '/bundles/workflowdesignerpro/js/pimcore/workflow/graph.js',
+            '/bundles/workflowdesignerpro/js/pimcore/workflow/support-strategy.js',
             '/bundles/workflowdesignerpro/js/pimcore/workflow/editor.js',
             '/bundles/workflowdesignerpro/js/pimcore/workflow/place.js',
             '/bundles/workflowdesignerpro/js/pimcore/workflow/transition.js',

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2025-12-09
+
+### Added
+- **Support Strategy Configuration** - Choose how workflows apply to objects:
+  - Simple strategy: Select classes from a list (existing behavior)
+  - Expression strategy: Use Symfony expressions with object conditions
+  - Custom service strategy: Implement WorkflowSupportStrategyInterface
+- **Expression Templates** - 10 pre-built expression templates for common use cases
+- **Expression Autocomplete** - Help panel with available methods, operators, and syntax
+- **Auto-detection of Strategy Services** - Automatically finds services implementing WorkflowSupportStrategyInterface
+- **Strategy-specific Validation** - Validation rules adapted to each support strategy type
+
+### Changed
+- Workflow properties panel redesigned to accommodate support strategy configuration
+- Validation no longer requires class list when using Custom service strategy
+- Config endpoint now includes support strategy services and expression templates
+
 ## [1.0.0] - 2025-12-09
 
 ### Added
