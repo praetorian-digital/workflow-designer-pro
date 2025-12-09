@@ -1,0 +1,31 @@
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    PraetorianDigital\WorkflowDesignerProBundle\:
+        resource: '../../*'
+        exclude:
+            - '../../DependencyInjection/'
+            - '../../Entity/'
+            - '../../Resources/'
+            - '../../Tests/'
+            - '../../Model/DTO/'
+
+    # Installer - must be public for bundle access
+    PraetorianDigital\WorkflowDesignerProBundle\Installer\Installer:
+        public: true
+
+    # Services with explicit configuration
+    PraetorianDigital\WorkflowDesignerProBundle\Service\WorkflowStorageService:
+        arguments:
+            $storagePath: '%workflow_designer_pro.storage_path%'
+            $publishPath: '%workflow_designer_pro.publish_path%'
+            $maxVersions: '%workflow_designer_pro.max_versions%'
+
+    PraetorianDigital\WorkflowDesignerProBundle\Service\WorkflowPublishService:
+        arguments:
+            $publishPath: '%workflow_designer_pro.publish_path%'
+            $backupEnabled: '%workflow_designer_pro.backup_enabled%'
+            $autoCacheClear: '%workflow_designer_pro.auto_cache_clear%'
+

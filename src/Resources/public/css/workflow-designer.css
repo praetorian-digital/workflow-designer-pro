@@ -1,0 +1,314 @@
+/**
+ * Workflow Designer Pro - Styles
+ */
+
+/* Main Panel */
+.workflow-designer-pro-panel {
+    background: #f5f5f5;
+}
+
+/* Graph Editor Canvas */
+#workflow-graph-canvas {
+    cursor: default;
+    user-select: none;
+}
+
+/* Place Node Styles */
+.workflow-place {
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.workflow-place.selected {
+    box-shadow: 0 0 0 3px #e74c3c;
+}
+
+.workflow-place.initial {
+    box-shadow: 0 0 0 3px #27ae60;
+}
+
+/* Transition Arrow Styles */
+.workflow-transition {
+    stroke: #7f8c8d;
+    stroke-width: 2;
+    fill: none;
+}
+
+.workflow-transition.selected {
+    stroke: #e74c3c;
+    stroke-width: 3;
+}
+
+.workflow-transition-label {
+    font-size: 11px;
+    fill: #333;
+}
+
+/* Grid Styles */
+.workflow-designer-grid .x-grid-row-selected {
+    background-color: #e8f4fc !important;
+}
+
+/* Form Styles */
+.workflow-designer-form .x-form-item-label {
+    font-weight: 600;
+}
+
+/* Status Indicators */
+.workflow-status-draft {
+    color: #3498db;
+}
+
+.workflow-status-published {
+    color: #27ae60;
+}
+
+.workflow-status-error {
+    color: #e74c3c;
+}
+
+/* Validation Results */
+.workflow-validation-error {
+    color: #e74c3c;
+    background: #fdf2f2;
+    padding: 8px;
+    border-left: 3px solid #e74c3c;
+    margin: 4px 0;
+}
+
+.workflow-validation-warning {
+    color: #f39c12;
+    background: #fef9e7;
+    padding: 8px;
+    border-left: 3px solid #f39c12;
+    margin: 4px 0;
+}
+
+.workflow-validation-info {
+    color: #3498db;
+    background: #ebf5fb;
+    padding: 8px;
+    border-left: 3px solid #3498db;
+    margin: 4px 0;
+}
+
+/* Simulation Panel */
+.workflow-simulation-current {
+    font-size: 18px;
+    font-weight: bold;
+    color: #3498db;
+    padding: 10px;
+    background: #ebf5fb;
+    border-radius: 4px;
+    margin-bottom: 15px;
+}
+
+.workflow-simulation-history {
+    font-family: monospace;
+    font-size: 12px;
+}
+
+/* Import/Export */
+.workflow-import-preview {
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 12px;
+    background: #2d2d2d;
+    color: #f8f8f2;
+    padding: 15px;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* Version History */
+.workflow-version-current {
+    background: #e8f8f5 !important;
+}
+
+.workflow-version-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.workflow-version-badge.published {
+    background: #27ae60;
+    color: white;
+}
+
+.workflow-version-badge.draft {
+    background: #3498db;
+    color: white;
+}
+
+/* Welcome Panel */
+.workflow-welcome-panel {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 30px;
+}
+
+.workflow-welcome-panel h1 {
+    color: #2c3e50;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 10px;
+}
+
+.workflow-welcome-panel h2 {
+    color: #34495e;
+    margin-top: 25px;
+}
+
+.workflow-welcome-panel ul {
+    line-height: 1.8;
+}
+
+.workflow-welcome-panel code {
+    background: #ecf0f1;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: monospace;
+}
+
+/* Toolbar */
+.workflow-toolbar {
+    background: #fff;
+    border-bottom: 1px solid #ddd;
+}
+
+/* Color Preview */
+.workflow-color-preview {
+    display: inline-block;
+    width: 60px;
+    height: 20px;
+    border-radius: 3px;
+    border: 1px solid rgba(0,0,0,0.1);
+}
+
+/* Guard Badge */
+.workflow-guard-badge {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    background: url('/bundles/pimcoreadmin/img/flat-color-icons/lock.svg') no-repeat center;
+    background-size: contain;
+}
+
+/* Notification Badge */
+.workflow-notification-badge {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    background: url('/bundles/pimcoreadmin/img/flat-color-icons/email.svg') no-repeat center;
+    background-size: contain;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+    .workflow-designer-graph {
+        min-height: 400px;
+    }
+}
+
+/* Inverted Material Icons */
+.pimcore_material_icon_workflow.pimcore_material_icon_inverted {
+    filter: invert(1) brightness(2);
+}
+
+/* Graph Editor Tab Icon - make it stand out */
+.x-tab .pimcore_material_icon_workflow {
+    filter: invert(0.8) sepia(1) saturate(5) hue-rotate(180deg);
+}
+
+/* Field Info Icons */
+.workflow-field-info {
+    display: inline-block;
+    vertical-align: middle;
+    margin-left: 3px;
+}
+
+.workflow-field-info i {
+    font-style: normal;
+    color: #888;
+    transition: color 0.2s ease;
+}
+
+.workflow-field-info:hover i {
+    color: #3498db;
+}
+
+/* Info icon using Unicode character */
+.workflow-field-info i.pimcore_icon_info::before {
+    content: "ℹ";
+    font-size: 12px;
+}
+
+/* Fieldset styling improvements */
+.x-fieldset {
+    margin-bottom: 15px;
+}
+
+.x-fieldset-header-text {
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+/* Form field empty text */
+.x-form-field[placeholder] {
+    color: #aaa;
+}
+
+/* Help text panels */
+.workflow-help-panel {
+    background: #f5f5f5;
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 15px;
+    color: #666;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.workflow-help-panel strong {
+    color: #333;
+}
+
+/* Custom tooltips */
+.workflow-tooltip {
+    background: #2c3e50;
+    color: #fff;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    max-width: 300px;
+    line-height: 1.4;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+/* Tag field improvements */
+.x-tagfield .x-tagfield-item {
+    background: #3498db;
+    color: white;
+    border-radius: 3px;
+}
+
+/* Checkbox styling */
+.x-form-cb-label {
+    font-weight: normal;
+}
+
+/* Print styles */
+@media print {
+    .workflow-designer-toolbar,
+    .workflow-designer-sidebar {
+        display: none;
+    }
+    
+    .workflow-designer-graph {
+        width: 100%;
+        page-break-inside: avoid;
+    }
+}
+

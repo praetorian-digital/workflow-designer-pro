@@ -1,0 +1,174 @@
+# Sample Document Publishing Workflow
+# Import this file into Workflow Designer Pro to see a complete example
+
+pimcore:
+    workflows:
+        document_publishing:
+            type: workflow
+            supports:
+                - Pimcore\Model\DataObject\Document
+            initial_markings:
+                - draft
+            marking_store:
+                type: state_table
+            audit_trail:
+                enabled: true
+            places:
+                draft:
+                    label: Draft
+                    color: '#3498db'
+                    visibleInHeader: true
+                    permissions:
+                        modify:
+                            condition: is_granted('ROLE_AUTHOR')
+                            modify: true
+                            save: true
+                            publish: false
+                in_review:
+                    label: In Review
+                    color: '#9b59b6'
+                    visibleInHeader: true
+                technical_review:
+                    label: Technical Review
+                    color: '#e67e22'
+                    visibleInHeader: true
+                legal_review:
+                    label: Legal Review
+                    color: '#f39c12'
+                    visibleInHeader: true
+                approved:
+                    label: Approved
+                    color: '#27ae60'
+                    visibleInHeader: true
+                published:
+                    label: Published
+                    color: '#27ae60'
+                    visibleInHeader: true
+                archived:
+                    label: Archived
+                    color: '#95a5a6'
+                    visibleInHeader: false
+            transitions:
+                submit:
+                    from:
+                        - draft
+                    to:
+                        - in_review
+                    options:
+                        label: Submit for Review
+                        iconClass: pimcore_icon_arrow_right
+                        notes:
+                            commentEnabled: true
+                            commentRequired: false
+                            type: workflow
+                            title: Submission Notes
+                send_to_technical:
+                    from:
+                        - in_review
+                    to:
+                        - technical_review
+                    options:
+                        label: Send to Technical Review
+                    guard:
+                        roles:
+                            - ROLE_REVIEWER
+                send_to_legal:
+                    from:
+                        - in_review
+                        - technical_review
+                    to:
+                        - legal_review
+                    options:
+                        label: Send to Legal Review
+                    guard:
+                        roles:
+                            - ROLE_REVIEWER
+                            - ROLE_TECH_REVIEWER
+                approve_technical:
+                    from:
+                        - technical_review
+                    to:
+                        - legal_review
+                    options:
+                        label: Approve Technical
+                        iconClass: pimcore_icon_accept
+                    guard:
+                        roles:
+                            - ROLE_TECH_REVIEWER
+                approve_legal:
+                    from:
+                        - legal_review
+                    to:
+                        - approved
+                    options:
+                        label: Approve Legal
+                        iconClass: pimcore_icon_accept
+                        notificationSettings:
+                            - channelType: pimcore_notification
+                              notifyRoles:
+                                  - ROLE_PUBLISHER
+                    guard:
+                        roles:
+                            - ROLE_LEGAL_REVIEWER
+                reject:
+                    from:
+                        - in_review
+                        - technical_review
+                        - legal_review
+                    to:
+                        - draft
+                    options:
+                        label: Reject / Request Changes
+                        iconClass: pimcore_icon_cancel
+                        notes:
+                            commentEnabled: true
+                            commentRequired: true
+                            type: workflow
+                            title: Rejection Reason
+                publish:
+                    from:
+                        - approved
+                    to:
+                        - published
+                    options:
+                        label: Publish
+                        iconClass: pimcore_icon_publish
+                        changePublicationState: force_published
+                    guard:
+                        permissions:
+                            - publish
+                unpublish:
+                    from:
+                        - published
+                    to:
+                        - approved
+                    options:
+                        label: Unpublish
+                        iconClass: pimcore_icon_unpublish
+                        changePublicationState: force_unpublished
+                    guard:
+                        permissions:
+                            - publish
+                archive:
+                    from:
+                        - published
+                        - approved
+                    to:
+                        - archived
+                    options:
+                        label: Archive
+                        iconClass: pimcore_icon_folder
+                    guard:
+                        roles:
+                            - ROLE_ADMIN
+                restore:
+                    from:
+                        - archived
+                    to:
+                        - draft
+                    options:
+                        label: Restore to Draft
+                    guard:
+                        roles:
+                            - ROLE_ADMIN
+

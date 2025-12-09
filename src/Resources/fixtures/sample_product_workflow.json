@@ -1,0 +1,138 @@
+{
+    "name": "product_approval",
+    "type": "workflow",
+    "supports": ["Pimcore\\Model\\DataObject\\Product"],
+    "initialMarking": "draft",
+    "markingStore": {
+        "type": "state_table",
+        "property": "state"
+    },
+    "auditTrailEnabled": true,
+    "places": [
+        {
+            "name": "draft",
+            "label": "Draft",
+            "color": "#3498db",
+            "visibleInHeader": true,
+            "positionX": 100,
+            "positionY": 150
+        },
+        {
+            "name": "pending_review",
+            "label": "Pending Review",
+            "color": "#f39c12",
+            "visibleInHeader": true,
+            "positionX": 300,
+            "positionY": 150
+        },
+        {
+            "name": "approved",
+            "label": "Approved",
+            "color": "#27ae60",
+            "visibleInHeader": true,
+            "positionX": 500,
+            "positionY": 100
+        },
+        {
+            "name": "rejected",
+            "label": "Rejected",
+            "color": "#e74c3c",
+            "visibleInHeader": true,
+            "positionX": 500,
+            "positionY": 200
+        },
+        {
+            "name": "published",
+            "label": "Published",
+            "color": "#27ae60",
+            "visibleInHeader": true,
+            "positionX": 700,
+            "positionY": 100
+        }
+    ],
+    "transitions": [
+        {
+            "name": "submit_for_review",
+            "label": "Submit for Review",
+            "from": ["draft"],
+            "to": ["pending_review"],
+            "iconClass": "pimcore_icon_arrow_right",
+            "guard": {
+                "permissions": ["objects"]
+            }
+        },
+        {
+            "name": "approve",
+            "label": "Approve",
+            "from": ["pending_review"],
+            "to": ["approved"],
+            "iconClass": "pimcore_icon_accept",
+            "guard": {
+                "roles": ["ROLE_EDITOR", "ROLE_ADMIN"]
+            },
+            "notificationSettings": [
+                {
+                    "channelType": "mail",
+                    "notifyRoles": ["ROLE_MARKETING"],
+                    "mailType": "template",
+                    "mailPath": "@WorkflowDesignerProBundle/emails/product_approved.html.twig"
+                }
+            ],
+            "notes": {
+                "commentEnabled": true,
+                "commentRequired": false,
+                "type": "workflow"
+            }
+        },
+        {
+            "name": "reject",
+            "label": "Reject",
+            "from": ["pending_review"],
+            "to": ["rejected"],
+            "iconClass": "pimcore_icon_cancel",
+            "guard": {
+                "roles": ["ROLE_EDITOR", "ROLE_ADMIN"]
+            },
+            "notes": {
+                "commentEnabled": true,
+                "commentRequired": true,
+                "type": "workflow"
+            }
+        },
+        {
+            "name": "revise",
+            "label": "Revise",
+            "from": ["rejected"],
+            "to": ["draft"],
+            "iconClass": "pimcore_icon_edit"
+        },
+        {
+            "name": "publish",
+            "label": "Publish",
+            "from": ["approved"],
+            "to": ["published"],
+            "iconClass": "pimcore_icon_publish",
+            "guard": {
+                "permissions": ["publish"]
+            },
+            "changePublicationState": "force_published"
+        },
+        {
+            "name": "unpublish",
+            "label": "Unpublish",
+            "from": ["published"],
+            "to": ["approved"],
+            "iconClass": "pimcore_icon_unpublish",
+            "guard": {
+                "permissions": ["publish"]
+            },
+            "changePublicationState": "force_unpublished"
+        }
+    ],
+    "globalActions": [],
+    "metadata": {
+        "description": "Sample product approval workflow for demonstration",
+        "author": "Workflow Designer Pro"
+    }
+}
+
