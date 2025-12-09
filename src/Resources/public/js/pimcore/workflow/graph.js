@@ -1,10 +1,19 @@
 /**
  * Workflow Designer Pro - Graph Editor
- * Visual canvas-based workflow graph editor
+ * Visual canvas-based workflow graph editor with connection ports and orthogonal routing
  */
 pimcore.registerNS('pimcore.plugin.WorkflowDesignerPro.Graph');
 
 pimcore.plugin.WorkflowDesignerPro.Graph = Class.create({
+    // Port configuration
+    PORT_RADIUS: 6,
+    PORT_HIT_RADIUS: 12,
+    PORT_POSITIONS: ['top', 'right', 'bottom', 'left'],
+    
+    // Orthogonal routing configuration
+    ROUTE_MARGIN: 30,
+    ROUTE_OFFSET_STEP: 15,
+    
     initialize: function (options) {
         this.workflow = options.workflow;
         this.editor = options.editor;
@@ -15,6 +24,14 @@ pimcore.plugin.WorkflowDesignerPro.Graph = Class.create({
         this.dragging = null;
         this.canvas = null;
         this.ctx = null;
+        
+        // Connection dragging state
+        this.connectingFrom = null;  // {placeName, port}
+        this.connectingTo = null;    // {x, y} current mouse position
+        this.hoveredPort = null;     // {placeName, port} for visual feedback
+        
+        // Track which place is being hovered for port visibility
+        this.hoveredPlace = null;
     },
 
     getPanel: function () {
@@ -132,6 +149,7 @@ pimcore.plugin.WorkflowDesignerPro.Graph = Class.create({
             this.canvas.addEventListener('dblclick', this.onDoubleClick.bind(this));
             this.canvas.addEventListener('wheel', this.onWheel.bind(this));
             this.canvas.addEventListener('contextmenu', this.onContextMenu.bind(this));
+            this.canvas.addEventListener('mouseleave', this.onMouseLeave.bind(this));
 
             this.resizeCanvas();
             this.render();
@@ -251,14 +269,20 @@ pimcore.plugin.WorkflowDesignerPro.Graph = Class.create({
         ctx.translate(this.panX, this.panY);
         ctx.scale(this.zoom, this.zoom);
 
-        // Draw transitions (arrows)
-        for (var tName in this.transitions) {
-            this.drawTransition(this.transitions[tName]);
-        }
+        // Draw transitions (arrows) with orthogonal routing
+        this.drawAllTransitions();
 
         // Draw places
         for (var pName in this.places) {
             this.drawPlace(this.places[pName]);
+        }
+        
+        // Draw connection ports on hovered place or all places when connecting
+        this.drawConnectionPorts();
+        
+        // Draw rubber band connection line when dragging
+        if (this.connectingFrom) {
+            this.drawConnectionPreview();
         }
 
         ctx.restore();
@@ -349,68 +373,522 @@ pimcore.plugin.WorkflowDesignerPro.Graph = Class.create({
             ctx.fill();
         }
     },
-
-    drawTransition: function (transition) {
+    
+    /**
+     * Get the position of a connection port on a place
+     */
+    getPortPosition: function(place, port) {
+        var cx = place.x + place.width / 2;
+        var cy = place.y + place.height / 2;
+        
+        switch(port) {
+            case 'top':
+                return { x: cx, y: place.y };
+            case 'right':
+                return { x: place.x + place.width, y: cy };
+            case 'bottom':
+                return { x: cx, y: place.y + place.height };
+            case 'left':
+                return { x: place.x, y: cy };
+        }
+        return { x: cx, y: cy };
+    },
+    
+    /**
+     * Draw connection ports on places
+     */
+    drawConnectionPorts: function() {
         var ctx = this.ctx;
-        var isSelected = this.selectedElement && this.selectedElement.type === 'transition' && this.selectedElement.name === transition.name;
-
-        // Draw arrows from each "from" place to each "to" place
-        for (var i = 0; i < transition.from.length; i++) {
-            var fromPlace = this.places[transition.from[i]];
-            if (!fromPlace) continue;
-
-            for (var j = 0; j < transition.to.length; j++) {
-                var toPlace = this.places[transition.to[j]];
-                if (!toPlace) continue;
-
-                this.drawArrow(
-                    fromPlace.x + fromPlace.width,
-                    fromPlace.y + fromPlace.height / 2,
-                    toPlace.x,
-                    toPlace.y + toPlace.height / 2,
-                    transition.label,
-                    isSelected
-                );
+        var self = this;
+        
+        // Determine which places should show ports
+        var showPortsFor = {};
+        
+        if (this.connectingFrom) {
+            // When connecting, show ports on all places except the source
+            for (var name in this.places) {
+                if (name !== this.connectingFrom.placeName) {
+                    showPortsFor[name] = true;
+                }
             }
+            // Also show the source port
+            showPortsFor[this.connectingFrom.placeName] = true;
+        } else if (this.hoveredPlace) {
+            // When hovering, only show ports on hovered place
+            showPortsFor[this.hoveredPlace] = true;
+        }
+        
+        // Draw ports
+        for (var placeName in showPortsFor) {
+            var place = this.places[placeName];
+            if (!place) continue;
+            
+            this.PORT_POSITIONS.forEach(function(port) {
+                var pos = self.getPortPosition(place, port);
+                var isHovered = self.hoveredPort && 
+                    self.hoveredPort.placeName === placeName && 
+                    self.hoveredPort.port === port;
+                var isSource = self.connectingFrom && 
+                    self.connectingFrom.placeName === placeName && 
+                    self.connectingFrom.port === port;
+                
+                // Draw port circle
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, self.PORT_RADIUS, 0, Math.PI * 2);
+                
+                if (isSource) {
+                    ctx.fillStyle = '#e74c3c';
+                    ctx.strokeStyle = '#c0392b';
+                } else if (isHovered) {
+                    ctx.fillStyle = '#27ae60';
+                    ctx.strokeStyle = '#1e8449';
+                } else {
+                    ctx.fillStyle = '#95a5a6';
+                    ctx.strokeStyle = '#7f8c8d';
+                }
+                
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
         }
     },
-
-    drawArrow: function (x1, y1, x2, y2, label, isSelected) {
+    
+    /**
+     * Draw the rubber band preview when connecting
+     */
+    drawConnectionPreview: function() {
+        if (!this.connectingFrom || !this.connectingTo) return;
+        
         var ctx = this.ctx;
-        var headLen = 12;
-        var angle = Math.atan2(y2 - y1, x2 - x1);
-
-        // Curved line for better visibility
-        var midX = (x1 + x2) / 2;
-        var midY = (y1 + y2) / 2 - 20;
-
+        var fromPlace = this.places[this.connectingFrom.placeName];
+        if (!fromPlace) return;
+        
+        var startPos = this.getPortPosition(fromPlace, this.connectingFrom.port);
+        var endX = this.connectingTo.x;
+        var endY = this.connectingTo.y;
+        
+        // If hovering over a valid port, snap to it
+        if (this.hoveredPort && this.hoveredPort.placeName !== this.connectingFrom.placeName) {
+            var targetPlace = this.places[this.hoveredPort.placeName];
+            if (targetPlace) {
+                var targetPos = this.getPortPosition(targetPlace, this.hoveredPort.port);
+                endX = targetPos.x;
+                endY = targetPos.y;
+            }
+        }
+        
+        // Draw dashed orthogonal preview line
+        ctx.save();
+        ctx.setLineDash([5, 5]);
+        ctx.strokeStyle = '#3498db';
+        ctx.lineWidth = 2;
+        
+        var route = this.calculateOrthogonalRoute(startPos.x, startPos.y, endX, endY, 
+            this.connectingFrom.port, this.hoveredPort ? this.hoveredPort.port : null);
+        
         ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.quadraticCurveTo(midX, midY, x2, y2);
-        ctx.strokeStyle = isSelected ? '#e74c3c' : '#7f8c8d';
+        ctx.moveTo(route[0].x, route[0].y);
+        for (var i = 1; i < route.length; i++) {
+            ctx.lineTo(route[i].x, route[i].y);
+        }
+        ctx.stroke();
+        
+        // Draw arrow head at end
+        if (route.length >= 2) {
+            var lastSeg = route[route.length - 1];
+            var prevSeg = route[route.length - 2];
+            var angle = Math.atan2(lastSeg.y - prevSeg.y, lastSeg.x - prevSeg.x);
+            var headLen = 10;
+            
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            ctx.moveTo(lastSeg.x, lastSeg.y);
+            ctx.lineTo(lastSeg.x - headLen * Math.cos(angle - Math.PI / 6), lastSeg.y - headLen * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(lastSeg.x - headLen * Math.cos(angle + Math.PI / 6), lastSeg.y - headLen * Math.sin(angle + Math.PI / 6));
+            ctx.closePath();
+            ctx.fillStyle = '#3498db';
+            ctx.fill();
+        }
+        
+        ctx.restore();
+    },
+    
+    /**
+     * Calculate orthogonal route between two points
+     */
+    calculateOrthogonalRoute: function(x1, y1, x2, y2, fromPort, toPort) {
+        var route = [];
+        var margin = this.ROUTE_MARGIN;
+        
+        route.push({ x: x1, y: y1 });
+        
+        // Determine exit direction from source
+        var exitX = x1, exitY = y1;
+        switch(fromPort) {
+            case 'top':
+                exitY = y1 - margin;
+                break;
+            case 'right':
+                exitX = x1 + margin;
+                break;
+            case 'bottom':
+                exitY = y1 + margin;
+                break;
+            case 'left':
+                exitX = x1 - margin;
+                break;
+        }
+        
+        // Determine entry direction to target
+        var entryX = x2, entryY = y2;
+        switch(toPort) {
+            case 'top':
+                entryY = y2 - margin;
+                break;
+            case 'right':
+                entryX = x2 + margin;
+                break;
+            case 'bottom':
+                entryY = y2 + margin;
+                break;
+            case 'left':
+                entryX = x2 - margin;
+                break;
+        }
+        
+        // Simple orthogonal routing based on relative positions
+        if (fromPort === 'right' || fromPort === 'left') {
+            // Horizontal exit
+            route.push({ x: exitX, y: y1 });
+            
+            if (toPort === 'top' || toPort === 'bottom') {
+                // Vertical entry - need two bends
+                route.push({ x: exitX, y: entryY });
+                route.push({ x: x2, y: entryY });
+            } else {
+                // Horizontal entry - need one or two bends
+                var midY = (y1 + y2) / 2;
+                route.push({ x: exitX, y: midY });
+                route.push({ x: entryX, y: midY });
+                route.push({ x: entryX, y: y2 });
+            }
+        } else {
+            // Vertical exit
+            route.push({ x: x1, y: exitY });
+            
+            if (toPort === 'left' || toPort === 'right') {
+                // Horizontal entry - need two bends
+                route.push({ x: entryX, y: exitY });
+                route.push({ x: entryX, y: y2 });
+            } else {
+                // Vertical entry - need one or two bends
+                var midX = (x1 + x2) / 2;
+                route.push({ x: midX, y: exitY });
+                route.push({ x: midX, y: entryY });
+                route.push({ x: x2, y: entryY });
+            }
+        }
+        
+        route.push({ x: x2, y: y2 });
+        
+        // Clean up redundant points
+        return this.simplifyRoute(route);
+    },
+    
+    /**
+     * Remove redundant points from route (points on same line)
+     */
+    simplifyRoute: function(route) {
+        if (route.length <= 2) return route;
+        
+        var simplified = [route[0]];
+        
+        for (var i = 1; i < route.length - 1; i++) {
+            var prev = simplified[simplified.length - 1];
+            var curr = route[i];
+            var next = route[i + 1];
+            
+            // Check if current point is on the same line as prev and next
+            var sameX = prev.x === curr.x && curr.x === next.x;
+            var sameY = prev.y === curr.y && curr.y === next.y;
+            
+            if (!sameX && !sameY) {
+                simplified.push(curr);
+            }
+        }
+        
+        simplified.push(route[route.length - 1]);
+        return simplified;
+    },
+    
+    /**
+     * Determine optimal ports for a transition between two places
+     */
+    determineOptimalPorts: function(fromPlace, toPlace) {
+        var fromCenterX = fromPlace.x + fromPlace.width / 2;
+        var fromCenterY = fromPlace.y + fromPlace.height / 2;
+        var toCenterX = toPlace.x + toPlace.width / 2;
+        var toCenterY = toPlace.y + toPlace.height / 2;
+        
+        var dx = toCenterX - fromCenterX;
+        var dy = toCenterY - fromCenterY;
+        
+        var fromPort, toPort;
+        
+        // Determine based on relative position
+        if (Math.abs(dx) > Math.abs(dy)) {
+            // More horizontal than vertical
+            if (dx > 0) {
+                fromPort = 'right';
+                toPort = 'left';
+            } else {
+                fromPort = 'left';
+                toPort = 'right';
+            }
+        } else {
+            // More vertical than horizontal
+            if (dy > 0) {
+                fromPort = 'bottom';
+                toPort = 'top';
+            } else {
+                fromPort = 'top';
+                toPort = 'bottom';
+            }
+        }
+        
+        return { fromPort: fromPort, toPort: toPort };
+    },
+    
+    /**
+     * Draw all transitions with orthogonal routing and smart label placement
+     */
+    drawAllTransitions: function() {
+        var ctx = this.ctx;
+        var self = this;
+        
+        // Group transitions by source-target pairs to handle offsets
+        var transitionsByPair = {};
+        
+        for (var tName in this.transitions) {
+            var transition = this.transitions[tName];
+            var isSelected = this.selectedElement && 
+                this.selectedElement.type === 'transition' && 
+                this.selectedElement.name === transition.name;
+            
+            for (var i = 0; i < transition.from.length; i++) {
+                var fromPlace = this.places[transition.from[i]];
+                if (!fromPlace) continue;
+                
+                for (var j = 0; j < transition.to.length; j++) {
+                    var toPlace = this.places[transition.to[j]];
+                    if (!toPlace) continue;
+                    
+                    // Create a key for this pair
+                    var pairKey = transition.from[i] + '->' + transition.to[j];
+                    var reversePairKey = transition.to[j] + '->' + transition.from[i];
+                    
+                    if (!transitionsByPair[pairKey]) {
+                        transitionsByPair[pairKey] = [];
+                    }
+                    
+                    transitionsByPair[pairKey].push({
+                        name: tName,
+                        label: transition.label,
+                        fromPlace: fromPlace,
+                        toPlace: toPlace,
+                        isSelected: isSelected,
+                        hasReverse: !!transitionsByPair[reversePairKey]
+                    });
+                }
+            }
+        }
+        
+        // Draw each transition with offset for multiples between same places
+        for (var pairKey in transitionsByPair) {
+            var transitions = transitionsByPair[pairKey];
+            var count = transitions.length;
+            
+            transitions.forEach(function(t, idx) {
+                var offset = count > 1 ? (idx - (count - 1) / 2) * self.ROUTE_OFFSET_STEP : 0;
+                self.drawOrthogonalTransition(t.fromPlace, t.toPlace, t.label, t.isSelected, offset);
+            });
+        }
+    },
+    
+    /**
+     * Draw a single transition with orthogonal routing
+     */
+    drawOrthogonalTransition: function(fromPlace, toPlace, label, isSelected, offset) {
+        var ctx = this.ctx;
+        
+        // Determine optimal ports
+        var ports = this.determineOptimalPorts(fromPlace, toPlace);
+        var startPos = this.getPortPosition(fromPlace, ports.fromPort);
+        var endPos = this.getPortPosition(toPlace, ports.toPort);
+        
+        // Calculate route
+        var route = this.calculateOrthogonalRoute(
+            startPos.x, startPos.y, 
+            endPos.x, endPos.y, 
+            ports.fromPort, ports.toPort
+        );
+        
+        // Apply offset to middle segments for parallel routes
+        if (offset !== 0 && route.length > 2) {
+            route = this.applyRouteOffset(route, offset, ports.fromPort);
+        }
+        
+        // Draw the route
+        ctx.beginPath();
+        ctx.moveTo(route[0].x, route[0].y);
+        for (var i = 1; i < route.length; i++) {
+            ctx.lineTo(route[i].x, route[i].y);
+        }
+        
+        ctx.strokeStyle = isSelected ? '#e74c3c' : '#5d6d7e';
         ctx.lineWidth = isSelected ? 3 : 2;
         ctx.stroke();
-
-        // Arrow head
-        ctx.beginPath();
-        ctx.moveTo(x2, y2);
-        ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI / 6), y2 - headLen * Math.sin(angle - Math.PI / 6));
-        ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 6), y2 - headLen * Math.sin(angle + Math.PI / 6));
-        ctx.closePath();
-        ctx.fillStyle = isSelected ? '#e74c3c' : '#7f8c8d';
-        ctx.fill();
-
-        // Label
-        if (label) {
-            ctx.fillStyle = '#333';
-            ctx.font = '11px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(label, midX, midY - 5);
+        
+        // Draw arrow head
+        if (route.length >= 2) {
+            var lastPt = route[route.length - 1];
+            var prevPt = route[route.length - 2];
+            var angle = Math.atan2(lastPt.y - prevPt.y, lastPt.x - prevPt.x);
+            var headLen = 10;
+            
+            ctx.beginPath();
+            ctx.moveTo(lastPt.x, lastPt.y);
+            ctx.lineTo(lastPt.x - headLen * Math.cos(angle - Math.PI / 6), lastPt.y - headLen * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(lastPt.x - headLen * Math.cos(angle + Math.PI / 6), lastPt.y - headLen * Math.sin(angle + Math.PI / 6));
+            ctx.closePath();
+            ctx.fillStyle = isSelected ? '#e74c3c' : '#5d6d7e';
+            ctx.fill();
         }
+        
+        // Draw label with background on the longest segment
+        if (label) {
+            this.drawTransitionLabel(route, label, isSelected);
+        }
+    },
+    
+    /**
+     * Apply offset to route for parallel transitions
+     */
+    applyRouteOffset: function(route, offset, fromPort) {
+        var newRoute = [];
+        
+        for (var i = 0; i < route.length; i++) {
+            var pt = { x: route[i].x, y: route[i].y };
+            
+            // Skip first and last points (they're at the ports)
+            if (i > 0 && i < route.length - 1) {
+                // Determine if this is a horizontal or vertical segment
+                var prev = route[i - 1];
+                var isHorizontal = Math.abs(pt.y - prev.y) < 1;
+                
+                if (isHorizontal) {
+                    pt.y += offset;
+                } else {
+                    pt.x += offset;
+                }
+            }
+            
+            newRoute.push(pt);
+        }
+        
+        return newRoute;
+    },
+    
+    /**
+     * Draw transition label with background for readability
+     */
+    drawTransitionLabel: function(route, label, isSelected) {
+        var ctx = this.ctx;
+        
+        // Find the longest segment to place the label
+        var longestSeg = { length: 0, midX: 0, midY: 0, isHorizontal: true };
+        
+        for (var i = 1; i < route.length; i++) {
+            var p1 = route[i - 1];
+            var p2 = route[i];
+            var dx = p2.x - p1.x;
+            var dy = p2.y - p1.y;
+            var len = Math.sqrt(dx * dx + dy * dy);
+            
+            if (len > longestSeg.length) {
+                longestSeg = {
+                    length: len,
+                    midX: (p1.x + p2.x) / 2,
+                    midY: (p1.y + p2.y) / 2,
+                    isHorizontal: Math.abs(dx) > Math.abs(dy)
+                };
+            }
+        }
+        
+        // Measure text
+        ctx.font = '11px Arial';
+        var metrics = ctx.measureText(label);
+        var textWidth = metrics.width;
+        var textHeight = 14;
+        var padding = 4;
+        
+        var labelX = longestSeg.midX;
+        var labelY = longestSeg.midY;
+        
+        // Offset label perpendicular to the segment
+        if (longestSeg.isHorizontal) {
+            labelY -= textHeight / 2 + 4;
+        } else {
+            labelX += 6;
+        }
+        
+        // Draw background pill
+        var bgX = labelX - textWidth / 2 - padding;
+        var bgY = labelY - textHeight / 2 - padding / 2;
+        var bgWidth = textWidth + padding * 2;
+        var bgHeight = textHeight + padding;
+        var bgRadius = 4;
+        
+        ctx.beginPath();
+        ctx.moveTo(bgX + bgRadius, bgY);
+        ctx.lineTo(bgX + bgWidth - bgRadius, bgY);
+        ctx.arcTo(bgX + bgWidth, bgY, bgX + bgWidth, bgY + bgRadius, bgRadius);
+        ctx.lineTo(bgX + bgWidth, bgY + bgHeight - bgRadius);
+        ctx.arcTo(bgX + bgWidth, bgY + bgHeight, bgX + bgWidth - bgRadius, bgY + bgHeight, bgRadius);
+        ctx.lineTo(bgX + bgRadius, bgY + bgHeight);
+        ctx.arcTo(bgX, bgY + bgHeight, bgX, bgY + bgHeight - bgRadius, bgRadius);
+        ctx.lineTo(bgX, bgY + bgRadius);
+        ctx.arcTo(bgX, bgY, bgX + bgRadius, bgY, bgRadius);
+        ctx.closePath();
+        
+        ctx.fillStyle = isSelected ? '#fdf2f2' : '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = isSelected ? '#e74c3c' : '#bdc3c7';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        
+        // Draw text
+        ctx.fillStyle = isSelected ? '#c0392b' : '#2c3e50';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, labelX, labelY);
     },
 
     onMouseDown: function (e) {
         var pos = this.getMousePos(e);
+        
+        // Check if clicking on a port
+        var portHit = this.hitTestPort(pos.x, pos.y);
+        if (portHit) {
+            // Start connecting
+            this.connectingFrom = portHit;
+            this.connectingTo = { x: pos.x, y: pos.y };
+            this.canvas.style.cursor = 'crosshair';
+            this.render();
+            return;
+        }
+        
         var element = this.hitTest(pos.x, pos.y);
 
         if (element) {
@@ -438,7 +916,22 @@ pimcore.plugin.WorkflowDesignerPro.Graph = Class.create({
     onMouseMove: function (e) {
         var pos = this.getMousePos(e);
 
-        if (this.dragging) {
+        if (this.connectingFrom) {
+            // Update connection endpoint
+            this.connectingTo = { x: pos.x, y: pos.y };
+            
+            // Check for port hover (excluding source place)
+            var portHit = this.hitTestPort(pos.x, pos.y);
+            if (portHit && portHit.placeName !== this.connectingFrom.placeName) {
+                this.hoveredPort = portHit;
+                this.canvas.style.cursor = 'crosshair';
+            } else {
+                this.hoveredPort = null;
+                this.canvas.style.cursor = 'crosshair';
+            }
+            
+            this.render();
+        } else if (this.dragging) {
             var place = this.places[this.dragging.element.name];
             place.x = pos.x - this.dragging.offsetX;
             place.y = pos.y - this.dragging.offsetY;
@@ -449,18 +942,198 @@ pimcore.plugin.WorkflowDesignerPro.Graph = Class.create({
             this.panY = e.clientY - this.panning.startY;
             this.render();
         } else {
+            // Check for port hover
+            var portHit = this.hitTestPort(pos.x, pos.y);
+            if (portHit) {
+                this.hoveredPort = portHit;
+                this.hoveredPlace = portHit.placeName;
+                this.canvas.style.cursor = 'crosshair';
+                this.render();
+                return;
+            }
+            
+            this.hoveredPort = null;
+            
+            // Check for place hover (for showing ports)
             var element = this.hitTest(pos.x, pos.y);
-            this.canvas.style.cursor = element ? 'pointer' : 'default';
+            if (element && element.type === 'place') {
+                if (this.hoveredPlace !== element.name) {
+                    this.hoveredPlace = element.name;
+                    this.render();
+                }
+                this.canvas.style.cursor = 'pointer';
+            } else {
+                if (this.hoveredPlace) {
+                    this.hoveredPlace = null;
+                    this.render();
+                }
+                this.canvas.style.cursor = element ? 'pointer' : 'default';
+            }
         }
     },
 
     onMouseUp: function (e) {
+        if (this.connectingFrom) {
+            // Complete connection if over a valid target port
+            if (this.hoveredPort && this.hoveredPort.placeName !== this.connectingFrom.placeName) {
+                this.createTransitionFromConnection(
+                    this.connectingFrom.placeName,
+                    this.hoveredPort.placeName
+                );
+            }
+            
+            this.connectingFrom = null;
+            this.connectingTo = null;
+            this.hoveredPort = null;
+            this.canvas.style.cursor = 'default';
+            this.render();
+            return;
+        }
+        
         if (this.dragging) {
             this.syncToEditor();
         }
         this.dragging = null;
         this.panning = null;
         this.canvas.style.cursor = 'default';
+    },
+    
+    onMouseLeave: function(e) {
+        // Cancel any in-progress connection
+        if (this.connectingFrom) {
+            this.connectingFrom = null;
+            this.connectingTo = null;
+            this.hoveredPort = null;
+            this.canvas.style.cursor = 'default';
+            this.render();
+        }
+        
+        // Clear hover states
+        if (this.hoveredPlace) {
+            this.hoveredPlace = null;
+            this.render();
+        }
+    },
+    
+    /**
+     * Create a transition from a drag-and-drop connection
+     */
+    createTransitionFromConnection: function(fromPlaceName, toPlaceName) {
+        var count = Object.keys(this.transitions).length + 1;
+        var name = 'transition_' + count;
+        
+        while (this.transitions[name]) {
+            count++;
+            name = 'transition_' + count;
+        }
+        
+        // Open dialog with pre-filled from/to
+        new Ext.Window({
+            title: t('Create Transition'),
+            width: 400,
+            modal: true,
+            layout: 'fit',
+            items: [{
+                xtype: 'form',
+                bodyPadding: 10,
+                items: [
+                    {
+                        xtype: 'textfield',
+                        name: 'name',
+                        fieldLabel: t('Name'),
+                        value: name,
+                        allowBlank: false,
+                        regex: /^[a-z][a-z0-9_]*$/
+                    },
+                    {
+                        xtype: 'textfield',
+                        name: 'label',
+                        fieldLabel: t('Label'),
+                        value: 'Transition ' + count
+                    },
+                    {
+                        xtype: 'displayfield',
+                        fieldLabel: t('From'),
+                        value: fromPlaceName
+                    },
+                    {
+                        xtype: 'displayfield',
+                        fieldLabel: t('To'),
+                        value: toPlaceName
+                    }
+                ]
+            }],
+            buttons: [
+                {
+                    text: t('Cancel'),
+                    handler: function (btn) {
+                        btn.up('window').close();
+                    }
+                },
+                {
+                    text: t('Create'),
+                    handler: function (btn) {
+                        var form = btn.up('window').down('form').getForm();
+                        if (form.isValid()) {
+                            var values = form.getValues();
+                            
+                            // Create complete transition data structure
+                            var transitionData = {
+                                name: values.name,
+                                label: values.label || values.name,
+                                iconClass: '',
+                                objectLayout: '',
+                                from: [fromPlaceName],
+                                to: [toPlaceName],
+                                guard: [],
+                                options: [],
+                                notes: {},
+                                notificationSettings: [],
+                                changePublicationState: '',
+                                metadata: []
+                            };
+                            
+                            this.transitions[values.name] = {
+                                name: values.name,
+                                label: transitionData.label,
+                                from: transitionData.from,
+                                to: transitionData.to,
+                                data: transitionData
+                            };
+                            this.syncToEditor();
+                            this.render();
+                            btn.up('window').close();
+                        }
+                    }.bind(this)
+                }
+            ]
+        }).show();
+    },
+    
+    /**
+     * Hit test for connection ports
+     */
+    hitTestPort: function(x, y) {
+        var self = this;
+        
+        for (var placeName in this.places) {
+            var place = this.places[placeName];
+            
+            for (var i = 0; i < this.PORT_POSITIONS.length; i++) {
+                var port = this.PORT_POSITIONS[i];
+                var pos = this.getPortPosition(place, port);
+                
+                var dx = x - pos.x;
+                var dy = y - pos.y;
+                var dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist <= this.PORT_HIT_RADIUS) {
+                    return { placeName: placeName, port: port };
+                }
+            }
+        }
+        
+        return null;
     },
 
     onDoubleClick: function (e) {
@@ -579,10 +1252,10 @@ pimcore.plugin.WorkflowDesignerPro.Graph = Class.create({
             }
         }
 
-        // Test transitions (simplified - just check label area)
+        // Test transitions - check if click is near any transition route
         for (var tName in this.transitions) {
             var transition = this.transitions[tName];
-            // Check if click is near any transition line
+            
             for (var i = 0; i < transition.from.length; i++) {
                 var fromPlace = this.places[transition.from[i]];
                 if (!fromPlace) continue;
@@ -591,17 +1264,47 @@ pimcore.plugin.WorkflowDesignerPro.Graph = Class.create({
                     var toPlace = this.places[transition.to[j]];
                     if (!toPlace) continue;
                     
-                    var midX = (fromPlace.x + fromPlace.width + toPlace.x) / 2;
-                    var midY = (fromPlace.y + fromPlace.height / 2 + toPlace.y + toPlace.height / 2) / 2 - 20;
+                    // Get the route for this transition
+                    var ports = this.determineOptimalPorts(fromPlace, toPlace);
+                    var startPos = this.getPortPosition(fromPlace, ports.fromPort);
+                    var endPos = this.getPortPosition(toPlace, ports.toPort);
+                    var route = this.calculateOrthogonalRoute(
+                        startPos.x, startPos.y,
+                        endPos.x, endPos.y,
+                        ports.fromPort, ports.toPort
+                    );
                     
-                    if (Math.abs(x - midX) < 40 && Math.abs(y - midY) < 20) {
-                        return {type: 'transition', name: tName};
+                    // Check if click is near any segment of the route
+                    for (var k = 1; k < route.length; k++) {
+                        if (this.isPointNearSegment(x, y, route[k-1], route[k], 10)) {
+                            return {type: 'transition', name: tName};
+                        }
                     }
                 }
             }
         }
 
         return null;
+    },
+    
+    /**
+     * Check if a point is near a line segment
+     */
+    isPointNearSegment: function(px, py, p1, p2, threshold) {
+        var dx = p2.x - p1.x;
+        var dy = p2.y - p1.y;
+        var length = Math.sqrt(dx * dx + dy * dy);
+        
+        if (length === 0) {
+            return Math.sqrt((px - p1.x) * (px - p1.x) + (py - p1.y) * (py - p1.y)) <= threshold;
+        }
+        
+        var t = Math.max(0, Math.min(1, ((px - p1.x) * dx + (py - p1.y) * dy) / (length * length)));
+        var nearestX = p1.x + t * dx;
+        var nearestY = p1.y + t * dy;
+        
+        var dist = Math.sqrt((px - nearestX) * (px - nearestX) + (py - nearestY) * (py - nearestY));
+        return dist <= threshold;
     },
 
     addPlace: function () {
@@ -878,12 +1581,13 @@ pimcore.plugin.WorkflowDesignerPro.Graph = Class.create({
     autoLayout: function () {
         var placeNames = Object.keys(this.places);
         var cols = Math.ceil(Math.sqrt(placeNames.length));
-        var spacing = 180;
+        var spacing = 200;
+        var rowHeight = 140;
         
         placeNames.forEach(function (name, idx) {
             var place = this.places[name];
             place.x = 100 + (idx % cols) * spacing;
-            place.y = 100 + Math.floor(idx / cols) * 120;
+            place.y = 100 + Math.floor(idx / cols) * rowHeight;
         }.bind(this));
 
         this.syncToEditor();
@@ -913,4 +1617,3 @@ pimcore.plugin.WorkflowDesignerPro.Graph = Class.create({
         this.editor.refreshFromGraph(places, transitions);
     }
 });
-

@@ -13,6 +13,24 @@
     user-select: none;
 }
 
+/* Connection Ports */
+.workflow-graph-connecting {
+    cursor: crosshair !important;
+}
+
+/* Port hover tooltip hint */
+.workflow-port-hint {
+    position: absolute;
+    background: #2c3e50;
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 1000;
+}
+
 /* Place Node Styles */
 .workflow-place {
     border-radius: 8px;
